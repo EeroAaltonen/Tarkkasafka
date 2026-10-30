@@ -7,6 +7,13 @@ Turun opiskelijaravintoloiden ruokalistat yhdessä paikassa. Asennettava web-sov
 - **Suodattimet:** ruokavalio (liharuoat, kasvis, gluteeniton, laktoositon, maidoton) ja Max 3,10 €
 - **Kartta:** ravintolat kartalla, vihreä = auki ja tarjolla suodatinta vastaavia ruokia
 - **Aukioloajat:** suljetut ravintolat harmaana listan lopussa. Ravintolan voi piilottaa tai pienentää nimeä painamalla.
+- **Suunnitelma:** viikon lounaat ja päivälliset aikatauluun raahaamalla (⠿) tai napilla, omat kotiruoat mukaan, päivän proteiini- ja kalorisumma, jako/kopiointi
+- **Etsi:** hae ruokaa nimellä kaikista ravintoloista tästä päivästä eteenpäin
+- **Mihin menen nyt?:** lähin auki oleva ravintola, jossa on suodattimiesi mukaista ruokaa
+- **Allergiasuodatin:** kala, äyriäiset, pähkinät, kananmuna, soija, selleri, sinappi, seesami (tunnistetaan ainesosista, ei aina täydellinen)
+- **Koko annoksen arvio:** proteiini ja kalorit koko lautaselle oletusannoskoolla (pääruoka 200 g, lisuke 150 g, kastike 50 g)
+- **Ravintolan viikkonäkymä** ja **englanninkielinen versio** (FI/EN-nappi)
+- **Suosikki-ilmoitukset:** ilmoitus, kun suosikkia on tarjolla tänään (sovellusta avatessa; Androidilla myös taustalla)
 - **Suosikit:** merkitse ruoka tähdellä ☆, niin näet missä ja milloin sitä on tarjolla tällä viikolla. Suosikit tallentuvat vain omaan selaimeesi.
 
 ## Ravintolat ja tietolähteet

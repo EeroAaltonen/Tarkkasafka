@@ -4,6 +4,38 @@
 // { line, price, items: [{ name, diets, recipeId?, nutrition }] }
 // nutrition = { kcal, protein, carbs, fat } grammoina / 100 g, tai null.
 
+const textOf = (v) => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+
+// ---------- Allergeenit ----------
+// Tunnistetaan ainesosista, allergeenikentistä, ruokavaliokoodeista ja nimestä.
+const ALLERGENS = {
+  kala: /\b(kala|kalan|lohi|lohen|turska|seiti|silakk|muikku|tonnikala|kirjolohi|ahven|kuha|siika|hauki|sei\b|fish|anjovis|sardiini)/i,
+  ayriaiset: /(äyriäi|katkarap|rapu|ravu|simpuk|mustekal|shrimp|prawn)/i,
+  pahkina: /(pähkinä|manteli|cashew|pistaasi|pekaani|maapähkinä|\bnuts?\b)/i,
+  kananmuna: /(kananmun|\bmuna\b|munaa|egg\b)/i,
+  soija: /(soija|soy|tofu|edamame)/i,
+  selleri: /(selleri|celery)/i,
+  sinappi: /(sinappi|sinapin|mustard)/i,
+  seesami: /(seesam|sesam|tahini)/i,
+};
+const CODE_ALLERGENS = { N: 'pahkina', Ä: 'kananmuna', S: 'selleri' };
+export function allergenTags(text, diets = []) {
+  const tags = new Set();
+  for (const [tag, re] of Object.entries(ALLERGENS)) if (re.test(text)) tags.add(tag);
+  for (const c of diets) if (CODE_ALLERGENS[c.toUpperCase()]) tags.add(CODE_ALLERGENS[c.toUpperCase()]);
+  return [...tags];
+}
+// Lisää jokaiseen ruokaan allergeenit ja poistaa väliaikaiset kentät.
+export function finalizeItems(days) {
+  for (const dishes of Object.values(days ?? {}))
+    for (const d of dishes)
+      for (const it of d.items) {
+        const tags = allergenTags(`${it.name} ${it._ing ?? ''}`, it.diets);
+        if (tags.length) it.allergens = tags;
+        delete it._ing;
+      }
+}
+
 const round1 = (n) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
 
 function normDiets(d) {
@@ -25,7 +57,7 @@ export function parseUnicaWeek(json) {
     for (const p of packages) {
       const items = (p.meals ?? [])
         .filter((m) => m?.name)
-        .map((m) => ({ name: m.name.trim(), diets: normDiets(m.diets), recipeId: m.recipeId ?? null, nutrition: null }));
+        .map((m) => ({ name: m.name.trim(), diets: normDiets(m.diets), recipeId: m.recipeId ?? null, nutrition: null, _ing: textOf(m.ingredients) }));
       if (items.length) dishes.push({ line: (p.name ?? '').trim(), price: (p.price ?? '').trim(), items });
     }
     if (dishes.length) out[date] = dishes;
@@ -75,11 +107,13 @@ export function parseSodexoDay(json) {
       .map(([, r]) => r);
     let items = recipes
       .filter((r) => r?.name)
-      .map((r) => ({ name: r.name.trim(), diets: normDiets(r.dietcodes), nutrition: parseSodexoNutrients(r.nutrients) }));
+      .map((r) => ({ name: r.name.trim(), diets: normDiets(r.dietcodes), nutrition: parseSodexoNutrients(r.nutrients), _ing: `${textOf(r.ingredients)} ${textOf(r.allergens_fi)}` }));
     // Jos reseptejä ei ole eritelty, käytetään ruokalajin otsikkoa.
-    if (!items.length && c.title_fi) items = [{ name: c.title_fi.trim(), diets: normDiets(c.dietcodes ?? c.properties), nutrition: null }];
+    if (!items.length && c.title_fi) items = [{ name: c.title_fi.trim(), diets: normDiets(c.dietcodes ?? c.properties), nutrition: null, _ing: textOf(c.additionalDietInfo?.allergens_fi ?? c.additionalDietInfo?.allergens) }];
     if (!items.length) continue;
-    dishes.push({ line: (c.category ?? '').trim(), price: (c.price ?? '').trim(), title: c.title_fi?.trim(), items });
+    const dish = { line: (c.category ?? '').trim(), price: (c.price ?? '').trim(), items };
+    if (c.title_en?.trim()) dish.title_en = c.title_en.trim();
+    dishes.push(dish);
   }
   return dishes;
 }
@@ -112,7 +146,7 @@ export function parseJamix(json, { price = '' } = {}) {
         const items = [...(mo.menuItems ?? [])]
           .sort((a, b) => (a.orderNumber ?? 0) - (b.orderNumber ?? 0))
           .filter((m) => m?.name)
-          .map((m) => ({ name: m.name.trim(), diets: normDiets(m.diets), nutrition: null }));
+          .map((m) => ({ name: m.name.trim(), diets: normDiets(m.diets), nutrition: null, _ing: textOf(m.ingredients) }));
         if (items.length) dishes.push({ line: (mo.name ?? '').trim(), price, items });
       }
       if (!dishes.length) delete out[date];

@@ -38,7 +38,7 @@ test('Sodexo-päivä', () => {
   assert.deepEqual(parseSodexoDay({ courses: [] }), []);
 });
 
-import { parseJamix, parseKarkaDay, parseUnicaHours, parseKarkaNutrition } from '../scripts/parsers.mjs';
+import { parseJamix, parseKarkaDay, parseUnicaHours, parseKarkaNutrition, finalizeItems, allergenTags } from '../scripts/parsers.mjs';
 
 test('Unica-aukioloajat', () => {
   assert.deepEqual(parseUnicaHours({ MenusForDays: [{ Date: '2026-10-30T00:00:00+00:00', LunchTime: '10.30-14.00' }] }), { '2026-10-30': '10:30–14:00' });
@@ -46,7 +46,9 @@ test('Unica-aukioloajat', () => {
 
 test('Jamix', () => {
   const j = [{ menuTypes: [{ menus: [{ days: [{ date: 20261102, mealoptions: [{ name: 'LOUNAS', menuItems: [{ name: 'Broileria', diets: 'G, L' }] }, { name: 'TYHJÄ', menuItems: [] }] }] }] }] }];
-  assert.deepEqual(parseJamix(j, { price: '3,10' }), { '2026-11-02': [{ line: 'LOUNAS', price: '3,10', items: [{ name: 'Broileria', diets: ['G', 'L'], nutrition: null }] }] });
+  const out = parseJamix(j, { price: '3,10' });
+  finalizeItems(out);
+  assert.deepEqual(out, { '2026-11-02': [{ line: 'LOUNAS', price: '3,10', items: [{ name: 'Broileria', diets: ['G', 'L'], nutrition: null }] }] });
 });
 
 test('Kårkaféerna', () => {
@@ -58,4 +60,11 @@ test('Kårkaféerna', () => {
   assert.equal(r.Aurum[0].items[0].nutrition.protein, 25.9);
   assert.deepEqual(r.Aurum[1].items[0].diets, ['VGN', 'G']);
   assert.equal(parseKarkaNutrition('ei mitään'), null);
+});
+
+test('Allergeenit', () => {
+  assert.deepEqual(allergenTags('Lohikeitto', []), ['kala']);
+  assert.deepEqual(allergenTags('Pasta carbonara', ['L', 'Ä']), ['kananmuna']);
+  assert.deepEqual(allergenTags('vesi, SOIJAproteiini, SINAPINSIEMEN', []).sort(), ['sinappi', 'soija']);
+  assert.deepEqual(allergenTags('Broileria ja riisiä', ['G']), []);
 });

@@ -17,10 +17,14 @@
   <header class="top">
     <div class="brand">
       <h1>Safkatrack</h1>
-      <button id="locate" class="chip" type="button" aria-pressed="false">📍 Lähimmät</button>
+      <div class="brand-btns">
+        <button id="lang" class="chip" type="button" aria-label="Kieli / Language">EN</button>
+        <button id="locate" class="chip" type="button" aria-pressed="false">📍 Lähimmät</button>
+      </div>
     </div>
     <nav id="days" class="days" aria-label="Päivä"></nav>
     <div id="filters" class="filters"></div>
+    <div id="allergy-row" class="allergy-row"></div>
   </header>
 
   <main id="view" aria-live="polite">
@@ -28,12 +32,14 @@
   </main>
 
   <footer id="status" class="status muted"></footer>
+  <div id="toast" class="toast" role="status"></div>
 
   <nav class="tabs" aria-label="Näkymä">
-    <button data-tab="list" type="button"><span aria-hidden="true">🍽️</span>Ravintolat</button>
-    <button data-tab="rank" type="button"><span aria-hidden="true">💪</span>Rankkaus</button>
-    <button data-tab="map" type="button"><span aria-hidden="true">🗺️</span>Kartta</button>
-    <button data-tab="favs" type="button"><span aria-hidden="true">⭐</span>Suosikit</button>
+    <button data-tab="list" type="button"><span aria-hidden="true">🍽️</span><span class="lbl">Ravintolat</span></button>
+    <button data-tab="rank" type="button"><span aria-hidden="true">💪</span><span class="lbl">Rankkaus</span></button>
+    <button data-tab="map" type="button"><span aria-hidden="true">🗺️</span><span class="lbl">Kartta</span></button>
+    <button data-tab="plan" type="button"><span aria-hidden="true">🗓️</span><span class="lbl">Suunnitelma</span></button>
+    <button data-tab="search" type="button"><span aria-hidden="true">🔎</span><span class="lbl">Etsi</span></button>
   </nav>
 
   <script src="app.js" type="module"></script>

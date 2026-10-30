@@ -6,7 +6,7 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { RESTAURANTS } from './restaurants.mjs';
-import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, parseKarkaDayById } from './parsers.mjs';
+import { parseUnicaWeek, parseUnicaRecipe, finalizeItems, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, parseKarkaDayById } from './parsers.mjs';
 
 const UA = 'Safkatrack/1.0 (Turku student menu PWA)';
 const TZ = 'Europe/Helsinki';
@@ -60,6 +60,18 @@ async function fetchUnica(r, weekStarts) {
     const url = `https://www.unica.fi/menuapi/week-menus?costCenter=${r.costNumber}&date=${monday}&language=fi`;
     Object.assign(days, parseUnicaWeek(await getJson(url)));
   }
+  // Englanninkieliset nimet resepti-id:n perusteella.
+  try {
+    const en = new Map();
+    for (const monday of weekStarts) {
+      const w = parseUnicaWeek(await getJson(`https://www.unica.fi/menuapi/week-menus?costCenter=${r.costNumber}&date=${monday}&language=en`, { retries: 1 }));
+      for (const dishes of Object.values(w)) for (const d of dishes) for (const it of d.items) if (it.recipeId) en.set(it.recipeId, it.name);
+    }
+    for (const dishes of Object.values(days)) for (const d of dishes) for (const it of d.items) {
+      const n = en.get(it.recipeId);
+      if (n && n !== it.name) it.name_en = n;
+    }
+  } catch { /* vain suomeksi */ }
   // Lounasajat ovat vain vanhassa feed-rajapinnassa.
   try {
     r.hoursByDate = parseUnicaHours(await getJson(`https://www.unica.fi/menuapi/feed/json?costNumber=${r.costNumber}&language=fi`, { retries: 1 }));
@@ -123,7 +135,8 @@ async function fillUnicaNutrition(menus, fromDate) {
   let failed = 0;
   await pool([...ids], 8, async (id) => {
     try {
-      cache.set(id, parseUnicaRecipe(await getJson(`https://www.unica.fi/menuapi/recipes/${id}?language=fi`, { retries: 1 })));
+      const json = await getJson(`https://www.unica.fi/menuapi/recipes/${id}?language=fi`, { retries: 1 });
+      cache.set(id, { nutrition: parseUnicaRecipe(json), ing: json?.ingredientsCleaned ?? '' });
     } catch {
       failed++;
     }
@@ -132,7 +145,11 @@ async function fillUnicaNutrition(menus, fromDate) {
     for (const dishes of Object.values(days))
       for (const d of dishes)
         for (const it of d.items) {
-          if (it.recipeId && cache.has(it.recipeId)) it.nutrition = cache.get(it.recipeId);
+          if (it.recipeId && cache.has(it.recipeId)) {
+            const c = cache.get(it.recipeId);
+            it.nutrition = c.nutrition;
+            it._ing = `${it._ing ?? ''} ${c.ing}`;
+          }
           delete it.recipeId;
         }
   console.log(`Unica-reseptit: ${ids.size} haettu, ${failed} epäonnistui`);
@@ -206,6 +223,8 @@ async function main() {
   if (!process.argv.includes('--no-geocode')) {
     for (const r of restaurants) r.coordsVerified = await geocode(r);
   }
+
+  for (const r of restaurants) finalizeItems(menus[r.id]);
 
   // Jos ravintola on kiinni jonain viikonpäivänä, sen päivän listaa ei näytetä
   // (Kårkaféernan sivu voi näyttää muiden ravintoloiden ruokia suljetulle päivälle).
