@@ -6,7 +6,7 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { RESTAURANTS } from './restaurants.mjs';
-import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, parseKarkaDayById, karkaSectionInfo, htmlToLines } from './parsers.mjs';
+import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, parseKarkaDayById } from './parsers.mjs';
 
 const UA = 'Safkatrack/1.0 (Turku student menu PWA)';
 const TZ = 'Europe/Helsinki';
@@ -72,7 +72,6 @@ async function fetchJamix(r, dates) {
   const d = (iso) => iso.replaceAll('-', '');
   const url = `https://fi.jamix.cloud/apps/menuservice/rest/haku/menu/${customer}/${kitchen}?lang=fi&date=${d(dates[0])}&date2=${d(dates.at(-1))}`;
   const text = await getText(url);
-  debug.jamix = text.slice(0, 4000);
   return parseJamix(JSON.parse(text), { price: r.price ?? '' });
 }
 
@@ -91,7 +90,6 @@ async function fetchKarka(rs, dates) {
   await pool(dates.filter((d) => isoWeek(d).day <= 6), 3, async (date) => {
     const { year, week, day } = isoWeek(date);
     const html = await getText(`https://www.karkafeerna.fi/fi/lounas/?year=${year}&week=${week}&day=${day}`);
-    if (!debug.karka && day === 1) { debug.karka = htmlToLines(html); debug.karkaSections = karkaSectionInfo(html); }
     const byId = parseKarkaDayById(html);
     const byName = parseKarkaDay(html, names);
     for (const r of rs) {
@@ -227,15 +225,13 @@ async function main() {
     r.hoursByDate = byDate;
   }
 
-  // Väliaikainen vianetsintä uusille lähteille.
+  // Yhteenveto haun onnistumisesta (data/debug.json) vianetsintää varten.
   for (const r of karka) if (!Object.keys(menus[r.id]).length) console.warn(`${r.name}: ei ruokia`);
   debug.summary = Object.fromEntries(restaurants.map((r) => {
     const days = Object.values(menus[r.id] ?? {});
     const dishes = days.flat();
     return [r.id, { days: days.length, dishes: dishes.length, withNutrition: dishes.filter((d) => d.items.some((i) => i.nutrition)).length, error: errors[r.id] ?? null }];
   }));
-  debug.sample = Object.fromEntries(restaurants.map((r) => [r.id, Object.values(menus[r.id] ?? {})[0]?.slice(0, 3) ?? null]));
-  delete debug.karka;
   await writeFile('data/debug.json', JSON.stringify(debug));
 
   const data = {
