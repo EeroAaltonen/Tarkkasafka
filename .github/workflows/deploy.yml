@@ -1,0 +1,53 @@
+# Hakee ruokalistat ja julkaisee sovelluksen GitHub Pagesiin.
+# Ajetaan joka push:lla, aamuisin ja päivällä, sekä käsin (Run workflow).
+name: Päivitä ruokalistat ja julkaise
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '15 3 * * *'   # n. klo 5–6 Suomen aikaa
+    - cron: '0 9 * * 1-5'  # n. klo 11–12, jos listat muuttuvat aamulla
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Testit
+        run: npm test
+      - name: Hae ruokalistat
+        run: node scripts/fetch-menus.mjs
+      - name: Kokoa sivusto
+        run: |
+          mkdir -p _site/data
+          cp index.html app.js style.css sw.js manifest.webmanifest _site/
+          cp -r icons _site/
+          cp data/menus.json _site/data/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

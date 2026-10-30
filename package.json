@@ -1,0 +1,11 @@
+{
+  "name": "safkatrack",
+  "private": true,
+  "type": "module",
+  "description": "Turun opiskelijaravintoloiden ruokalistat yhdessä paikassa (PWA)",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "fetch": "node scripts/fetch-menus.mjs",
+    "serve": "python3 -m http.server 8000"
+  }
+}
