@@ -35,8 +35,9 @@ jobs:
         run: |
           mkdir -p _site/data
           cp index.html app.js style.css sw.js manifest.webmanifest _site/
-          cp -r icons _site/
+          cp -r icons vendor _site/
           cp data/menus.json _site/data/
+          cp data/debug.json _site/data/ || true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

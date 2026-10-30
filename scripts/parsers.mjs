@@ -83,3 +83,121 @@ export function parseSodexoDay(json) {
   }
   return dishes;
 }
+
+// Unica feed/json -> { 'YYYY-MM-DD': '10:30–19:45' }
+export function parseUnicaHours(json) {
+  const out = {};
+  for (const d of json?.MenusForDays ?? []) {
+    const date = String(d.Date ?? '').slice(0, 10);
+    const t = String(d.LunchTime ?? '').trim();
+    if (date && t) out[date] = t.replace(/\s*[-–]\s*/, '–').replace(/\./g, ':');
+  }
+  return out;
+}
+
+// ---------- Juvenes (Jamix) ----------
+
+// Etsii rekursiivisesti päiväsolmut ({ date: 20261102, mealoptions: [...] }).
+export function parseJamix(json, { price = '' } = {}) {
+  const out = {};
+  const visit = (node) => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node.mealoptions) && node.date != null) {
+      const s = String(node.date);
+      const date = /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s.slice(0, 10);
+      const dishes = out[date] ?? (out[date] = []);
+      const opts = [...node.mealoptions].sort((a, b) => (a.orderNumber ?? 0) - (b.orderNumber ?? 0));
+      for (const mo of opts) {
+        const items = [...(mo.menuItems ?? [])]
+          .sort((a, b) => (a.orderNumber ?? 0) - (b.orderNumber ?? 0))
+          .filter((m) => m?.name)
+          .map((m) => ({ name: m.name.trim(), diets: normDiets(m.diets), nutrition: null }));
+        if (items.length) dishes.push({ line: (mo.name ?? '').trim(), price, items });
+      }
+      if (!dishes.length) delete out[date];
+      return;
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(json);
+  return out;
+}
+
+// ---------- Kårkaféerna (HTML-sivu) ----------
+
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', auml: 'ä', ouml: 'ö', aring: 'å', Auml: 'Ä', Ouml: 'Ö', Aring: 'Å', euro: '€', ndash: '–', mdash: '—' };
+export function htmlToLines(html) {
+  return String(html)
+    .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h\d|tr|td|th|section|article|span|a|strong|b|em|dt|dd)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => {
+      if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      return ENTITIES[e] ?? m;
+    })
+    .split('\n')
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+// "100g sisältää: Energia 182kcal, Suola 790mg, Proteiini 25.9g, Hiilihydraatit 9.4g, Rasva 7.3g."
+export function parseKarkaNutrition(line) {
+  const num = (re) => { const m = line.match(re); return m ? parseFloat(m[1].replace(',', '.')) : null; };
+  const n = { kcal: num(/Energia\s*([\d.,]+)\s*kcal/i), protein: num(/Proteiini\s*([\d.,]+)/i), carbs: num(/Hiilihydraat\w*\s*([\d.,]+)/i), fat: num(/Rasva\s*([\d.,]+)/i) };
+  return n.protein == null && n.kcal == null ? null : n;
+}
+
+const KARKA_META = [
+  /^Opiskelijat\b/i, /^Jatko-?opiskelijat\b/i, /^Henkilökunta\b/i, /^Muut\b/i,
+  /^Sis\.\s/i, /^100\s*g\s+sisältää/i,
+];
+const DIET_LINE = /^(\*|[A-ZÅÄÖ]{1,3})(\s+(\*|[A-ZÅÄÖ]{1,3}))*$/;
+
+// Yhden ravintolan osio -> [dish]
+function parseKarkaSection(lines) {
+  const dishes = [];
+  let consumedTo = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\d{1,2}$/.test(lines[i]) || i === 0) continue;
+    const titleLines = lines.slice(Math.max(consumedTo + 1, i - 2), i);
+    if (!titleLines.length) continue;
+    const dish = { line: '', price: '', items: [] };
+    let name = titleLines.join(' ');
+    if (titleLines.length >= 2) { dish.line = titleLines[0]; name = titleLines.slice(1).join(' '); }
+    const item = { name: name.replace(/\s*\*$/, '').trim(), diets: [], nutrition: null };
+    let j = i + 1;
+    if (j < lines.length && !KARKA_META.some((re) => re.test(lines[j])) && !DIET_LINE.test(lines[j]) && !/^\d{1,2}$/.test(lines[j])) {
+      dish.line = dish.line ? `${dish.line} · ${lines[j]}` : lines[j];
+      j++;
+    }
+    for (; j < lines.length; j++) {
+      const l = lines[j];
+      if (/^Opiskelijat\b/i.test(l)) { dish.price = (l.match(/[\d]+[.,]\d+/) ?? [''])[0].replace('.', ','); continue; }
+      if (/^100\s*g\s+sisältää/i.test(l)) { item.nutrition = parseKarkaNutrition(l); continue; }
+      if (KARKA_META.some((re) => re.test(l))) continue;
+      if (DIET_LINE.test(l) && !item.diets.length) { item.diets = l.split(/\s+/).filter((c) => c !== '*'); continue; }
+      break;
+    }
+    consumedTo = j - 1;
+    dish.items.push(item);
+    dishes.push(dish);
+  }
+  return dishes;
+}
+
+// Päivän sivu -> { ravintolan nimi: [dish] }
+export function parseKarkaDay(html, names) {
+  const lines = htmlToLines(html);
+  const wanted = new Map(names.map((n) => [n.toLowerCase(), n]));
+  const starts = [];
+  lines.forEach((l, i) => { if (wanted.has(l.toLowerCase())) starts.push(i); });
+  const best = {};
+  starts.forEach((s, k) => {
+    const name = wanted.get(lines[s].toLowerCase());
+    const dishes = parseKarkaSection(lines.slice(s + 1, starts[k + 1] ?? lines.length));
+    if (dishes.length > (best[name]?.length ?? 0)) best[name] = dishes;
+  });
+  return best;
+}

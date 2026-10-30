@@ -1,4 +1,5 @@
 data/menus.json
+data/debug.json
 _site/
 node_modules/
 .DS_Store

@@ -6,7 +6,7 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { RESTAURANTS } from './restaurants.mjs';
-import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay } from './parsers.mjs';
+import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, htmlToLines } from './parsers.mjs';
 
 const UA = 'Safkatrack/1.0 (Turku student menu PWA)';
 const TZ = 'Europe/Helsinki';
@@ -24,12 +24,15 @@ function mondayOf(iso) {
   return addDays(iso, -dow);
 }
 
-async function getJson(url, { retries = 2 } = {}) {
+async function getJson(url, opts) {
+  return JSON.parse(await getText(url, opts));
+}
+async function getText(url, { retries = 2 } = {}) {
   for (let i = 0; ; i++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return await res.text();
     } catch (e) {
       if (i >= retries) throw new Error(`${url}: ${e.message}`);
       await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
@@ -57,8 +60,45 @@ async function fetchUnica(r, weekStarts) {
     const url = `https://www.unica.fi/menuapi/week-menus?costCenter=${r.costNumber}&date=${monday}&language=fi`;
     Object.assign(days, parseUnicaWeek(await getJson(url)));
   }
+  // Lounasajat ovat vain vanhassa feed-rajapinnassa.
+  try {
+    r.hoursByDate = parseUnicaHours(await getJson(`https://www.unica.fi/menuapi/feed/json?costNumber=${r.costNumber}&language=fi`, { retries: 1 }));
+  } catch { /* ei aukioloaikoja */ }
   return days;
 }
+
+async function fetchJamix(r, dates) {
+  const [customer, kitchen] = r.jamix;
+  const d = (iso) => iso.replaceAll('-', '');
+  const url = `https://fi.jamix.cloud/apps/menuservice/rest/haku/menu/${customer}/${kitchen}?lang=fi&date=${d(dates[0])}&date2=${d(dates.at(-1))}`;
+  const text = await getText(url);
+  debug.jamix = text.slice(0, 4000);
+  return parseJamix(JSON.parse(text), { price: r.price ?? '' });
+}
+
+// Kårkaféernan sivulla on kaikki ravintolat samalla sivulla, päivä kerrallaan.
+function isoWeek(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const firstThu = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((d - firstThu) / 864e5 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+  return { year: d.getUTCFullYear(), week, day: day + 1 };
+}
+async function fetchKarka(rs, dates) {
+  const names = rs.map((r) => r.karkaName);
+  const result = Object.fromEntries(rs.map((r) => [r.id, {}]));
+  await pool(dates.filter((d) => isoWeek(d).day <= 6), 3, async (date) => {
+    const { year, week, day } = isoWeek(date);
+    const html = await getText(`https://www.karkafeerna.fi/fi/lounas/?year=${year}&week=${week}&day=${day}`);
+    if (!debug.karka && day === 1) debug.karka = htmlToLines(html).slice(0, 500);
+    const byName = parseKarkaDay(html, names);
+    for (const r of rs) if (byName[r.karkaName]?.length) result[r.id][date] = byName[r.karkaName];
+  });
+  return result;
+}
+
+const debug = {};
 
 async function fetchSodexo(r, dates) {
   const days = {};
@@ -134,9 +174,20 @@ async function main() {
   const menus = {};
   const errors = {};
 
-  await pool(restaurants, 4, async (r) => {
+  const karka = restaurants.filter((r) => r.chain === 'karka');
+  try {
+    Object.assign(menus, await fetchKarka(karka, dates));
+  } catch (e) {
+    for (const r of karka) { errors[r.id] = e.message; menus[r.id] = {}; }
+    console.warn(`Kårkaféerna: VIRHE ${e.message}`);
+  }
+
+  await pool(restaurants.filter((r) => r.chain !== 'karka'), 4, async (r) => {
     try {
-      menus[r.id] = r.chain === 'unica' ? await fetchUnica(r, weekStarts) : await fetchSodexo(r, dates);
+      menus[r.id] =
+        r.chain === 'unica' ? await fetchUnica(r, weekStarts)
+        : r.chain === 'jamix' ? await fetchJamix(r, dates)
+        : await fetchSodexo(r, dates);
       console.log(`${r.name}: ${Object.keys(menus[r.id]).length} päivää`);
     } catch (e) {
       errors[r.id] = e.message;
@@ -154,9 +205,24 @@ async function main() {
     for (const r of restaurants) r.coordsVerified = await geocode(r);
   }
 
+  // Aukioloajat päivämäärittäin: rajapinnasta (Unica) tai viikkorytmistä.
+  for (const r of restaurants) {
+    const byDate = {};
+    for (const date of dates) {
+      const dow = isoWeek(date).day;
+      const h = r.hoursByDate?.[date] ?? r.hours?.[dow];
+      if (h) byDate[date] = h;
+    }
+    r.hoursByDate = byDate;
+  }
+
+  // Väliaikainen vianetsintä uusille lähteille.
+  for (const r of karka) if (!Object.keys(menus[r.id]).length) console.warn(`${r.name}: ei ruokia`);
+  await writeFile('data/debug.json', JSON.stringify(debug));
+
   const data = {
     generatedAt: new Date().toISOString(),
-    restaurants: restaurants.map(({ costNumber, sodexoId, ...rest }) => rest),
+    restaurants: restaurants.map(({ costNumber, sodexoId, karkaName, jamix, hours, price, ...rest }) => rest),
     menus,
     errors,
   };
