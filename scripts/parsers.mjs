@@ -157,7 +157,7 @@ const KARKA_META = [
   /^Opiskelijat\b/i, /^Jatko-?opiskelijat\b/i, /^Henkilökunta\b/i, /^Muut\b/i,
   /^Sis\.\s/i, /^100\s*g\s+sisältää/i, /^@@/, /^Viikon lista$/i,
   // Ruokavalioiden selitysrivi, esim. "Laktoositon, gluteeniton, sis. paprikaa/chiliä."
-  /^(laktoositon|gluteeniton|maidoton|vegaan|vegaaninen|kasvis|pähkinätön|sisältää|kananmunaton)\b/i,
+  /^(laktoositon|gluteeniton|maidoton|vegaan|vegaaninen|vegetaarinen|kasvis|pähkinätön|sisältää|kananmunaton)\b/i,
 ];
 const DIET_LINE = /^(\*|[A-ZÅÄÖ]{1,3})(\s+(\*|[A-ZÅÄÖ]{1,3}))*$/;
 
