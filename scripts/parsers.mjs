@@ -153,44 +153,58 @@ export function parseKarkaNutrition(line) {
   return n.protein == null && n.kcal == null ? null : n;
 }
 
+// Rivit, jotka eivät ole ruokien nimiä.
 const KARKA_META = [
-  /^Opiskelijat\b/i, /^Jatko-?opiskelijat\b/i, /^Henkilökunta\b/i, /^Muut\b/i,
+  /^(Opiskelijat|Jatko-?opiskelijat|Henkilökunta|Muut)\b/i,
   /^Sis\.\s/i, /^100\s*g\s+sisältää/i, /^@@/, /^Viikon lista$/i,
   // Ruokavalioiden selitysrivi, esim. "Laktoositon, gluteeniton, sis. paprikaa/chiliä."
-  /^(laktoositon|gluteeniton|maidoton|vegaan|vegaaninen|vegetaarinen|kasvis|pähkinätön|sisältää|kananmunaton)\b/i,
+  /^(laktoositon|gluteeniton|maidoton|vegaan|vegaaninen|vegetaarinen|kasvis|pähkinätön|sisältää|kananmunaton|saatavilla)\b/i,
+  // Aukioloajat, esim. "MA-PE 11.00-14.30", "LA 12-15"
+  /^(MA|TI|KE|TO|PE|LA|SU)(\s*-\s*(MA|TI|KE|TO|PE|LA|SU))?\.?\s+\d/i,
 ];
-const DIET_LINE = /^(\*|[A-ZÅÄÖ]{1,3})(\s+(\*|[A-ZÅÄÖ]{1,3}))*$/;
+const DIET_LINE = /^(\*|[A-Za-zÅÄÖåäö]{1,3})(\s+(\*|[A-Za-zÅÄÖåäö]{1,3}))*$/;
+const CAT_NUM = /^\d{1,2}$/;
 
 // Yhden ravintolan osio -> [dish]
+// Sivulla ruoan nimi, hintakategoria (numero, nimi, hinnat), ruokavaliokoodit,
+// selitys ja ravintoarvot ovat peräkkäisinä riveinä. Hintakategoria voi olla
+// joko ruoan perässä tai ennen useampaa ruokaa (koskee silloin kaikkia niitä).
 function parseKarkaSection(lines) {
   const dishes = [];
-  let consumedTo = -1;
+  let cur = null, pending = null, prevTitle = false;
   for (let i = 0; i < lines.length; i++) {
-    if (!/^\d{1,2}$/.test(lines[i]) || i === 0) continue;
-    const titleLines = lines.slice(Math.max(consumedTo + 1, i - 2), i).filter((l) => !/^@@|^Viikon lista$/i.test(l) && !/^[A-ZÅÄÖ]{2,3}-[A-ZÅÄÖ]{2,3}\s+\d/.test(l));
-    if (!titleLines.length) continue;
-    const dish = { line: '', price: '', items: [] };
-    let name = titleLines.join(' ');
-    if (titleLines.length >= 2) { dish.line = titleLines[0]; name = titleLines.slice(1).join(' '); }
-    const item = { name: name.replace(/[\s,*]+$/, '').trim(), diets: [], nutrition: null };
-    let j = i + 1;
-    if (j < lines.length && !KARKA_META.some((re) => re.test(lines[j])) && !DIET_LINE.test(lines[j]) && !/^\d{1,2}$/.test(lines[j])) {
-      dish.line = dish.line ? `${dish.line} · ${lines[j]}` : lines[j];
-      j++;
+    const l = lines[i];
+    if (CAT_NUM.test(l)) {
+      const cat = { name: '', price: '' };
+      if (i + 1 < lines.length && !KARKA_META.some((re) => re.test(lines[i + 1]))) cat.name = lines[++i];
+      while (i + 1 < lines.length && /^(Opiskelijat|Jatko-?opiskelijat|Henkilökunta|Muut)\b/i.test(lines[i + 1])) {
+        const pl = lines[++i];
+        if (/^Opiskelijat\b/i.test(pl)) cat.price = (pl.match(/\d+[.,]\d+/) ?? [''])[0].replace('.', ',');
+      }
+      if (cur && !cur.cat) cur.cat = cat;
+      else pending = cat;
+      prevTitle = false;
+      continue;
     }
-    for (; j < lines.length; j++) {
-      const l = lines[j];
-      if (/^Opiskelijat\b/i.test(l)) { dish.price = (l.match(/[\d]+[.,]\d+/) ?? [''])[0].replace('.', ','); continue; }
-      if (/^100\s*g\s+sisältää/i.test(l)) { item.nutrition = parseKarkaNutrition(l); continue; }
-      if (KARKA_META.some((re) => re.test(l))) continue;
-      if (DIET_LINE.test(l)) { item.diets.push(...l.split(/\s+/).filter((c) => c !== '*')); continue; }
-      break;
+    if (/^100\s*g\s+sisältää/i.test(l)) { if (cur) cur.item.nutrition = parseKarkaNutrition(l); prevTitle = false; continue; }
+    if (KARKA_META.some((re) => re.test(l))) { prevTitle = false; continue; }
+    if (DIET_LINE.test(l)) { if (cur) cur.item.diets.push(...l.split(/\s+/).filter((c) => c !== '*').map((c) => c.toUpperCase())); prevTitle = false; continue; }
+    // Ruoan nimi. Kaksi nimiriviä peräkkäin = otsikko + kuvaus.
+    const name = l.replace(/[\s,*"]+$/, '').trim();
+    if (prevTitle && cur) {
+      cur.heading = cur.heading ? `${cur.heading} · ${cur.item.name}` : cur.item.name;
+      cur.item.name = name;
+    } else {
+      cur = { heading: '', cat: pending, item: { name, diets: [], nutrition: null } };
+      dishes.push(cur);
     }
-    consumedTo = j - 1;
-    dish.items.push(item);
-    dishes.push(dish);
+    prevTitle = true;
   }
-  return dishes;
+  return dishes.map((d) => ({
+    line: [d.heading, d.cat?.name].filter(Boolean).join(' · '),
+    price: d.cat?.price ?? '',
+    items: [d.item],
+  }));
 }
 
 // Päivän sivu -> { karkaId: [dish] }. Osio alkaa ravintolan "Viikon lista" -linkistä.

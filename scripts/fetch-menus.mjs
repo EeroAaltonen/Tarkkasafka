@@ -222,6 +222,13 @@ async function main() {
 
   // Väliaikainen vianetsintä uusille lähteille.
   for (const r of karka) if (!Object.keys(menus[r.id]).length) console.warn(`${r.name}: ei ruokia`);
+  debug.summary = Object.fromEntries(restaurants.map((r) => {
+    const days = Object.values(menus[r.id] ?? {});
+    const dishes = days.flat();
+    return [r.id, { days: days.length, dishes: dishes.length, withNutrition: dishes.filter((d) => d.items.some((i) => i.nutrition)).length, error: errors[r.id] ?? null }];
+  }));
+  debug.sample = Object.fromEntries(restaurants.map((r) => [r.id, Object.values(menus[r.id] ?? {})[0]?.slice(0, 3) ?? null]));
+  delete debug.karka;
   await writeFile('data/debug.json', JSON.stringify(debug));
 
   const data = {
