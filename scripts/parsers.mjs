@@ -150,7 +150,9 @@ export function htmlToLines(html) {
 export function parseKarkaNutrition(line) {
   const num = (re) => { const m = line.match(re); return m ? parseFloat(m[1].replace(',', '.')) : null; };
   const n = { kcal: num(/Energia\s*([\d.,]+)\s*kcal/i), protein: num(/Proteiini\s*([\d.,]+)/i), carbs: num(/Hiilihydraat\w*\s*([\d.,]+)/i), fat: num(/Rasva\s*([\d.,]+)/i) };
-  return n.protein == null && n.kcal == null ? null : n;
+  // Pelkät nollat = tietoja ei ole täytetty.
+  if (!n.kcal && !n.protein) return null;
+  return n;
 }
 
 // Rivit, jotka eivät ole ruokien nimiä.
@@ -213,8 +215,13 @@ export function parseKarkaDayById(html) {
   const starts = [];
   lines.forEach((l, i) => { const m = l.match(/^@@link:.*[?&]id=(\d+)/); if (m) starts.push([i, m[1]]); });
   const out = {};
+  // Sivun alaosa (yhteydenottolomake, osoitteet) ei kuulu viimeiseen ravintolaan.
+  const FOOTER = /^(Astra|Arken|Aurum|Kåren|Catering|Lue lisää|Lähetä)$/i;
   starts.forEach(([s, id], k) => {
-    const dishes = parseKarkaSection(lines.slice(s + 1, starts[k + 1]?.[0] ?? lines.length));
+    let section = lines.slice(s + 1, starts[k + 1]?.[0] ?? lines.length);
+    const stop = section.findIndex((l) => FOOTER.test(l));
+    if (stop >= 0) section = section.slice(0, stop);
+    const dishes = parseKarkaSection(section);
     if (dishes.length > (out[id]?.length ?? 0)) out[id] = dishes;
   });
   return out;
