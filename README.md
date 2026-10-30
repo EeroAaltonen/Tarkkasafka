@@ -4,6 +4,9 @@ Turun opiskelijaravintoloiden ruokalistat yhdessä paikassa. Asennettava web-sov
 
 - **Ravintolat:** päivän ruokalistat kaikista ravintoloista, lähin ensin (📍 Lähimmät)
 - **Rankkaus:** annokset tai ravintolat järjestettynä proteiinin, proteiini/energia-suhteen tai kalorien mukaan
+- **Suodattimet:** ruokavalio (liharuoat, kasvis, gluteeniton, laktoositon, maidoton) ja Max 3,10 €
+- **Kartta:** ravintolat kartalla, vihreä = auki ja tarjolla suodatinta vastaavia ruokia
+- **Aukioloajat:** suljetut ravintolat harmaana listan lopussa. Ravintolan voi piilottaa tai pienentää nimeä painamalla.
 - **Suosikit:** merkitse ruoka tähdellä ☆, niin näet missä ja milloin sitä on tarjolla tällä viikolla. Suosikit tallentuvat vain omaan selaimeesi.
 
 ## Ravintolat ja tietolähteet
@@ -12,10 +15,12 @@ Turun opiskelijaravintoloiden ruokalistat yhdessä paikassa. Asennettava web-sov
 |---|---|---|
 | Unica | Assarin Ullakko, Monttu ja Mercatori, Macciavelli, Galilei, Kisälli, Linus, Delica, Dental, Sigyn, Unican Kulma, Puutorin Nurkka | Kyllä, `menuapi/recipes/<id>` (per 100 g) |
 | Sodexo | Flavoria Medisiina D | Kyllä, `nutrients`-kenttä (per 100 g, energia kJ:nä) |
+| Kårkaféerna | Arken, Astra, Astra Solsidan, Aurum, Aurum Bistro, Kåren | Osittain, luetaan karkafeerna.fi:n lounassivulta |
+| Juvenes | Restaurant Block | Ei (Jamix-rajapinta) |
 
 Ravintoarvot ovat annoksen **pääkomponentin** arvot 100 g kohden. Lisukkeita ja kastikkeita ei lasketa mukaan, ja annokset ilman tietoja näytetään merkinnällä "Ei ravintotietoja".
 
-Ei vielä mukana: Kårkaféerna (Arken, Aurum, Kåren, Astra), Juvenes Block, Turun AMK Lemminkäisenkatu (Sodexo, ruokalista uudistuksessa). Ravintolan lisäys: `scripts/restaurants.mjs`.
+Ei vielä mukana: Turun AMK Lemminkäisenkatu (Sodexo, ruokalista uudistuksessa). Ravintolan lisäys: `scripts/restaurants.mjs`.
 
 ## Miten se toimii
 
