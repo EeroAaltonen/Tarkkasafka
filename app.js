@@ -138,8 +138,8 @@ const mainNutrition = (dish) => dish.items.find((i) => i.nutrition)?.nutrition ?
 const SAUCE_RE = /(kastike|kastiketta|kastikkeessa|majoneesi|dippi|dressing|pesto|salsa|sauce|mayo|aioli|tzatziki|chutney|hillo|raikas jogurtti)/i;
 const SIDE_SALAD_RE = /(salaatti|salad|coleslaw|raaste)/i;
 function portionGrams(it, idx) {
+  if (idx === 0) return /keitto|soup/i.test(it.name) ? 300 : 200; // pääruoka
   if (SAUCE_RE.test(it.name)) return 50;
-  if (idx === 0) return /keitto|soup/i.test(it.name) ? 300 : 200;
   if (SIDE_SALAD_RE.test(it.name)) return 80;
   return 150;
 }
@@ -549,27 +549,52 @@ function renderPlan() {
   const monday = state.planWeek ?? mondayOf(state.date ?? todayIso());
   state.planWeek = monday;
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
-  const slotHtml = (date, slot) => {
+  // Lukujärjestys: sarakkeina päivät, riveinä lounas ja päivällinen.
+  const shortDay = (date) => {
+    const d = new Date(date + 'T12:00:00');
+    return `<span class="tt-wd">${WD[state.lang][d.getDay()]}</span><span class="tt-date">${d.getDate()}.${d.getMonth() + 1}.</span>`;
+  };
+  const cell = (date, slot) => {
     const e = state.plan[date]?.[slot];
-    return `<div class="slot ${e ? 'filled' : ''}" data-dropslot="${date}|${slot}">
-      <div class="slot-label">${t(slot)}</div>
+    const key = `${date}|${slot}`;
+    const sel = state.planDetail === key ? ' selected' : '';
+    return `<div class="tt-cell ${e ? 'filled' : ''}${date === todayIso() ? ' today' : ''}${sel}" data-dropslot="${key}">
       ${e
-        ? `<div class="slot-entry" data-dragentry="${date}|${slot}"><span class="handle" aria-hidden="true">⠿</span>
-            <div class="slot-text"><div>${esc(entryName(e))}</div><div class="meta">${e.rname ? esc(e.rname) : ''}${e.n ? ` · P ≈${e.n.protein} g · ${e.n.kcal} kcal` : ''}</div></div>
-            <button class="linklike x" data-unplan="${date}|${slot}" aria-label="✕">✕</button></div>`
-        : `<button class="slot-empty" data-slotpick="${date}|${slot}">${t('planEmpty')}</button>`}
+        ? `<button class="tt-entry" data-dragentry="${key}" data-detail="${key}" title="${esc(entryName(e))}">
+            <span class="tt-name">${esc(entryName(e))}</span>${e.rname ? `<span class="tt-sub">${esc(e.rname)}</span>` : ''}</button>`
+        : `<button class="tt-add" data-slotpick="${key}" aria-label="${t(slot)}">+</button>`}
     </div>`;
   };
-  const dayTotal = (date) => {
+  const total = (date) => {
     const es = ['lunch', 'dinner'].map((s) => state.plan[date]?.[s]).filter((e) => e?.n);
-    if (!es.length) return '';
-    return `<div class="meta day-total">${t('planDayTotal')}: P ≈${es.reduce((a, e) => a + e.n.protein, 0)} g · ${es.reduce((a, e) => a + e.n.kcal, 0)} kcal</div>`;
+    if (!es.length) return '<div class="tt-total"></div>';
+    return `<div class="tt-total">P ≈${es.reduce((a, e) => a + e.n.protein, 0)} g<br>${es.reduce((a, e) => a + e.n.kcal, 0)} kcal</div>`;
   };
-  const grid = days.map((date) => `<section class="card plan-day ${date === todayIso() ? 'is-today' : ''}">
-      <div class="card-head"><h2>${dayLabel(date, true)}</h2></div>
-      <div class="slots">${slotHtml(date, 'lunch')}${slotHtml(date, 'dinner')}</div>
-      ${dayTotal(date)}
-    </section>`).join('');
+  const grid = `<div class="tt">
+      ${days.map((d) => `<div class="tt-day${d === todayIso() ? ' today' : ''}">${shortDay(d)}</div>`).join('')}
+      <div class="tt-row">${t('lunch')}</div>
+      ${days.map((d) => cell(d, 'lunch')).join('')}
+      <div class="tt-row">${t('dinner')}</div>
+      ${days.map((d) => cell(d, 'dinner')).join('')}
+      <div class="tt-row">${t('planDayTotal')}</div>
+      ${days.map(total).join('')}
+    </div>`;
+
+  // Napautetun ruoan tiedot
+  let detail = '';
+  if (state.planDetail) {
+    const [dd, ds] = state.planDetail.split('|');
+    const e = state.plan[dd]?.[ds];
+    if (e) {
+      detail = `<section class="card tt-detail">
+        <div class="meta">${dayLabel(dd, true)} · ${t(ds)}</div>
+        <strong>${esc(entryName(e))}</strong>
+        ${e.rname ? `<div class="meta">${esc(e.rname)}${e.price ? ` · ${esc(e.price)}` : ''}</div>` : ''}
+        ${e.n ? `<div class="plate">${t('plate')} (${t('estimate')}): <strong>P ≈${e.n.protein} g</strong> · ${e.n.kcal} kcal</div>` : ''}
+        <div class="dish-actions"><button class="chip" data-unplan="${state.planDetail}">✕ ${t('remove')}</button><button class="linklike" data-detail="">${t('close')}</button></div>
+      </section>`;
+    } else state.planDetail = null;
+  }
 
   // Lähde: valitun päivän ruoat
   const src = [];
@@ -595,8 +620,9 @@ function renderPlan() {
       <button class="chip" data-planweek="7">${t('nextWeek')}</button>
     </div>
     <p class="note">${t('planHint')}</p>
+    ${grid}
+    ${detail}
     ${pickSlot ? ownMealHtml(pickSlot) : ''}
-    <div class="plan-grid">${grid}</div>
     <div class="toolbar"><button class="chip" data-planshare>${t('planShare')}</button><button class="chip" data-planclear>${t('planClear')}</button></div>
     <h2 class="view-title">${t('planSource', dayLabel(state.date, true))}</h2>
     <div class="sources">${source}</div>`;
@@ -631,25 +657,32 @@ function planAsText() {
 }
 
 // ---------- Raahaus (hiiri ja kosketus) ----------
-// Raahaus alkaa ⠿-kahvasta, jotta sivun vierittäminen toimii normaalisti.
-let drag = null;
+// Lähdelistassa raahaus alkaa ⠿-kahvasta (jotta sivu vierii normaalisti),
+// lukujärjestyksessä koko ruoasta. Raahaus alkaa vasta kun osoitin liikkuu,
+// joten pelkkä napautus toimii tavallisena painalluksena.
+let drag = null, pending = null;
 document.addEventListener('pointerdown', (e) => {
   const handle = e.target.closest('.handle');
-  if (!handle) return;
-  const src = handle.closest('[data-dragdish],[data-dragentry]');
+  const src = handle ? handle.closest('[data-dragdish],[data-dragentry]') : e.target.closest('.tt-entry[data-dragentry]');
   if (!src) return;
-  e.preventDefault();
+  if (handle) e.preventDefault();
+  pending = { src, x: e.clientX, y: e.clientY };
+});
+function startDrag(e) {
+  const { src } = pending;
+  pending = null;
+  const r = src.getBoundingClientRect();
   const ghost = src.cloneNode(true);
   ghost.classList.add('ghost');
-  ghost.style.width = `${src.offsetWidth}px`;
+  ghost.style.width = `${Math.max(r.width, 120)}px`;
   document.body.appendChild(ghost);
-  drag = { src, ghost, dish: src.dataset.dragdish, entry: src.dataset.dragentry, dx: e.clientX - src.getBoundingClientRect().left, dy: e.clientY - src.getBoundingClientRect().top };
+  drag = { src, ghost, dish: src.dataset.dragdish, entry: src.dataset.dragentry, dx: Math.min(e.clientX - r.left, 60), dy: e.clientY - r.top };
   moveGhost(e);
-});
+}
 function moveGhost(e) {
   if (!drag) return;
   drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px)`;
-  document.querySelectorAll('.slot.over').forEach((s) => s.classList.remove('over'));
+  document.querySelectorAll('.over').forEach((s) => s.classList.remove('over'));
   drag.ghost.style.display = 'none';
   const under = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-dropslot]');
   drag.ghost.style.display = '';
@@ -658,9 +691,18 @@ function moveGhost(e) {
   if (e.clientY < 90) window.scrollBy(0, -12);
   else if (e.clientY > window.innerHeight - 90) window.scrollBy(0, 12);
 }
-document.addEventListener('pointermove', (e) => { if (drag) { e.preventDefault(); moveGhost(e); } }, { passive: false });
+document.addEventListener('pointermove', (e) => {
+  if (pending && Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6) startDrag(e);
+  if (drag) { e.preventDefault(); moveGhost(e); }
+}, { passive: false });
+// Estetään napautus raahauksen jälkeen
+let suppressClick = false;
+document.addEventListener('click', (e) => { if (suppressClick) { suppressClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 document.addEventListener('pointerup', (e) => {
+  pending = null;
   if (!drag) return;
+  suppressClick = true;
+  setTimeout(() => { suppressClick = false; }, 50);
   drag.ghost.style.display = 'none';
   const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-dropslot]');
   drag.ghost.remove();
@@ -681,7 +723,7 @@ document.addEventListener('pointerup', (e) => {
   }
   render();
 });
-document.addEventListener('pointercancel', () => { if (drag) { drag.ghost.remove(); drag = null; } });
+document.addEventListener('pointercancel', () => { pending = null; if (drag) { drag.ghost.remove(); drag = null; } });
 
 // ---------- Kartta (Leaflet + OpenStreetMap) ----------
 let map = null, markerLayer = null, leafletLoading = null;
@@ -843,14 +885,15 @@ document.addEventListener('click', async (e) => {
     state.slotPick = null;
     return render();
   }
-  if (ds.slotpick != null) { state.slotPick = ds.slotpick || null; render(); if (state.slotPick) $('#own-meal')?.focus(); return; }
+  if (ds.slotpick != null) { state.slotPick = ds.slotpick || null; state.planDetail = null; render(); if (state.slotPick) $('#own-meal')?.focus(); return; }
   if (ds.ownadd) {
     const v = $('#own-meal')?.value.trim();
     if (v) { const [date, slot] = ds.ownadd.split('|'); setPlan(date, slot, { name: v, own: true }); }
     state.slotPick = null;
     return render();
   }
-  if (ds.unplan) { const [date, slot] = ds.unplan.split('|'); setPlan(date, slot, null); return render(); }
+  if (ds.unplan) { const [date, slot] = ds.unplan.split('|'); setPlan(date, slot, null); state.planDetail = null; return render(); }
+  if (ds.detail != null) { state.planDetail = ds.detail && ds.detail !== state.planDetail ? ds.detail : null; state.slotPick = null; return render(); }
   if (ds.planweek) { state.planWeek = addDays(state.planWeek, Number(ds.planweek)); return render(); }
   if (ds.planclear != null) {
     if (!confirm(t('planClearConfirm'))) return;
