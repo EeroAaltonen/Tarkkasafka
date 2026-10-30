@@ -32,7 +32,7 @@ export const RESTAURANTS = [
   // Sodexo
   { id: 'flavoria', name: 'Flavoria Medisiina D', chain: 'sodexo', sodexoId: '102', campus: 'Kupittaan kampus', address: 'Kiinamyllynkatu 10, Turku', lat: 60.45251, lon: 22.29321, hours: WEEKDAYS('10:30–13:30') },
   // Kårkaféerna (Åbo Akademi)
-  { id: 'aurum', name: 'Aurum', chain: 'karka', karkaName: 'Aurum', campus: 'Åbo Akademi', address: 'Henrikinkatu 2, Turku', lat: 60.4558, lon: 22.2800, hours: { 1: '10:30–18:00', 2: '10:30–18:00', 3: '10:30–18:00', 4: '10:30–18:00', 5: '10:30–14:00', 6: '12:00–15:00' } },
+  { id: 'aurum', name: 'Aurum', chain: 'karka', karkaName: 'Aurum', karkaId: '8', campus: 'Åbo Akademi', address: 'Henrikinkatu 2, Turku', lat: 60.4558, lon: 22.2800, hours: { 1: '10:30–18:00', 2: '10:30–18:00', 3: '10:30–18:00', 4: '10:30–18:00', 5: '10:30–14:00', 6: '12:00–15:00' } },
   { id: 'aurum-bistro', name: 'Aurum Bistro', chain: 'karka', karkaName: 'Aurum Bistro', campus: 'Åbo Akademi', address: 'Henrikinkatu 2, Turku', lat: 60.4558, lon: 22.2800, hours: WEEKDAYS('11:00–14:00') },
   { id: 'arken', name: 'Arken', chain: 'karka', karkaName: 'Arken', campus: 'Åbo Akademi', address: 'Tehtaankatu 2, Turku', lat: 60.4470, lon: 22.2610, hours: WEEKDAYS('11:00–14:30') },
   { id: 'astra', name: 'Astra', chain: 'karka', karkaName: 'Astra', campus: 'Åbo Akademi', address: 'Porthaninkatu 3, Turku', lat: 60.4528, lon: 22.2780, hours: WEEKDAYS('11:00–14:30') },

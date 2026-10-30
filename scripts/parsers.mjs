@@ -130,6 +130,10 @@ const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', 
 export function htmlToLines(html) {
   return String(html)
     .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, '')
+    // Linkit ja kuvat merkitään omiksi riveikseen, koska ravintolan nimi on
+    // sivulla vain logona ja "Viikon lista" -linkin id:ssä.
+    .replace(/<a\b[^>]*href="([^"]*viikonlista[^"]*)"[^>]*>/gi, (m, href) => `\n@@link:${href.replace(/&amp;/g, '&')}\n`)
+    .replace(/<img\b[^>]*alt="([^"]+)"[^>]*>/gi, (m, alt) => `\n@@img:${alt}\n`)
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|h\d|tr|td|th|section|article|span|a|strong|b|em|dt|dd)>/gi, '\n')
     .replace(/<[^>]+>/g, '')
@@ -151,7 +155,9 @@ export function parseKarkaNutrition(line) {
 
 const KARKA_META = [
   /^Opiskelijat\b/i, /^Jatko-?opiskelijat\b/i, /^Henkilökunta\b/i, /^Muut\b/i,
-  /^Sis\.\s/i, /^100\s*g\s+sisältää/i,
+  /^Sis\.\s/i, /^100\s*g\s+sisältää/i, /^@@/, /^Viikon lista$/i,
+  // Ruokavalioiden selitysrivi, esim. "Laktoositon, gluteeniton, sis. paprikaa/chiliä."
+  /^(laktoositon|gluteeniton|maidoton|vegaan|vegaaninen|kasvis|pähkinätön|sisältää|kananmunaton)\b/i,
 ];
 const DIET_LINE = /^(\*|[A-ZÅÄÖ]{1,3})(\s+(\*|[A-ZÅÄÖ]{1,3}))*$/;
 
@@ -161,12 +167,12 @@ function parseKarkaSection(lines) {
   let consumedTo = -1;
   for (let i = 0; i < lines.length; i++) {
     if (!/^\d{1,2}$/.test(lines[i]) || i === 0) continue;
-    const titleLines = lines.slice(Math.max(consumedTo + 1, i - 2), i);
+    const titleLines = lines.slice(Math.max(consumedTo + 1, i - 2), i).filter((l) => !/^@@|^Viikon lista$/i.test(l) && !/^[A-ZÅÄÖ]{2,3}-[A-ZÅÄÖ]{2,3}\s+\d/.test(l));
     if (!titleLines.length) continue;
     const dish = { line: '', price: '', items: [] };
     let name = titleLines.join(' ');
     if (titleLines.length >= 2) { dish.line = titleLines[0]; name = titleLines.slice(1).join(' '); }
-    const item = { name: name.replace(/\s*\*$/, '').trim(), diets: [], nutrition: null };
+    const item = { name: name.replace(/[\s,*]+$/, '').trim(), diets: [], nutrition: null };
     let j = i + 1;
     if (j < lines.length && !KARKA_META.some((re) => re.test(lines[j])) && !DIET_LINE.test(lines[j]) && !/^\d{1,2}$/.test(lines[j])) {
       dish.line = dish.line ? `${dish.line} · ${lines[j]}` : lines[j];
@@ -177,7 +183,7 @@ function parseKarkaSection(lines) {
       if (/^Opiskelijat\b/i.test(l)) { dish.price = (l.match(/[\d]+[.,]\d+/) ?? [''])[0].replace('.', ','); continue; }
       if (/^100\s*g\s+sisältää/i.test(l)) { item.nutrition = parseKarkaNutrition(l); continue; }
       if (KARKA_META.some((re) => re.test(l))) continue;
-      if (DIET_LINE.test(l) && !item.diets.length) { item.diets = l.split(/\s+/).filter((c) => c !== '*'); continue; }
+      if (DIET_LINE.test(l)) { item.diets.push(...l.split(/\s+/).filter((c) => c !== '*')); continue; }
       break;
     }
     consumedTo = j - 1;
@@ -187,7 +193,26 @@ function parseKarkaSection(lines) {
   return dishes;
 }
 
-// Päivän sivu -> { ravintolan nimi: [dish] }
+// Päivän sivu -> { karkaId: [dish] }. Osio alkaa ravintolan "Viikon lista" -linkistä.
+export function parseKarkaDayById(html) {
+  const lines = htmlToLines(html);
+  const starts = [];
+  lines.forEach((l, i) => { const m = l.match(/^@@link:.*[?&]id=(\d+)/); if (m) starts.push([i, m[1]]); });
+  const out = {};
+  starts.forEach(([s, id], k) => {
+    const dishes = parseKarkaSection(lines.slice(s + 1, starts[k + 1]?.[0] ?? lines.length));
+    if (dishes.length > (out[id]?.length ?? 0)) out[id] = dishes;
+  });
+  return out;
+}
+
+// Vianetsintää varten: mitä riviä kunkin osion linkkiä edeltää.
+export function karkaSectionInfo(html) {
+  const lines = htmlToLines(html);
+  return lines.flatMap((l, i) => (l.startsWith('@@link:') ? [{ link: l, before: lines.slice(Math.max(0, i - 6), i) }] : []));
+}
+
+// Päivän sivu -> { ravintolan nimi: [dish] } (vanha, nimiotsikoiden mukaan)
 export function parseKarkaDay(html, names) {
   const lines = htmlToLines(html);
   const wanted = new Map(names.map((n) => [n.toLowerCase(), n]));

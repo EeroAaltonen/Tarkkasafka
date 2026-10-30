@@ -6,7 +6,7 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { RESTAURANTS } from './restaurants.mjs';
-import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, htmlToLines } from './parsers.mjs';
+import { parseUnicaWeek, parseUnicaRecipe, parseSodexoDay, parseUnicaHours, parseJamix, parseKarkaDay, parseKarkaDayById, karkaSectionInfo, htmlToLines } from './parsers.mjs';
 
 const UA = 'Safkatrack/1.0 (Turku student menu PWA)';
 const TZ = 'Europe/Helsinki';
@@ -91,9 +91,13 @@ async function fetchKarka(rs, dates) {
   await pool(dates.filter((d) => isoWeek(d).day <= 6), 3, async (date) => {
     const { year, week, day } = isoWeek(date);
     const html = await getText(`https://www.karkafeerna.fi/fi/lounas/?year=${year}&week=${week}&day=${day}`);
-    if (!debug.karka && day === 1) debug.karka = htmlToLines(html).slice(0, 500);
+    if (!debug.karka && day === 1) { debug.karka = htmlToLines(html); debug.karkaSections = karkaSectionInfo(html); }
+    const byId = parseKarkaDayById(html);
     const byName = parseKarkaDay(html, names);
-    for (const r of rs) if (byName[r.karkaName]?.length) result[r.id][date] = byName[r.karkaName];
+    for (const r of rs) {
+      const dishes = (r.karkaId && byId[r.karkaId]) || byName[r.karkaName];
+      if (dishes?.length) result[r.id][date] = dishes;
+    }
   });
   return result;
 }
@@ -222,7 +226,7 @@ async function main() {
 
   const data = {
     generatedAt: new Date().toISOString(),
-    restaurants: restaurants.map(({ costNumber, sodexoId, karkaName, jamix, hours, price, ...rest }) => rest),
+    restaurants: restaurants.map(({ costNumber, sodexoId, karkaName, karkaId, jamix, hours, price, ...rest }) => rest),
     menus,
     errors,
   };
