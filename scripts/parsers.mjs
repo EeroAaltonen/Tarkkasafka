@@ -175,7 +175,7 @@ function parseKarkaSection(lines) {
   const dishes = [];
   let cur = null, pending = null, prevTitle = false;
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
+    let l = lines[i];
     if (CAT_NUM.test(l)) {
       const cat = { name: '', price: '' };
       if (i + 1 < lines.length && !KARKA_META.some((re) => re.test(lines[i + 1]))) cat.name = lines[++i];
@@ -190,6 +190,7 @@ function parseKarkaSection(lines) {
     }
     if (/^100\s*g\s+sisältää/i.test(l)) { if (cur) cur.item.nutrition = parseKarkaNutrition(l); prevTitle = false; continue; }
     if (KARKA_META.some((re) => re.test(l))) { prevTitle = false; continue; }
+    if (/^\([A-Za-zÅÄÖåäö, ]{1,8}\)$/.test(l)) l = l.slice(1, -1).replace(/,/g, ' ');
     if (DIET_LINE.test(l)) { if (cur) cur.item.diets.push(...l.split(/\s+/).filter((c) => c !== '*').map((c) => c.toUpperCase())); prevTitle = false; continue; }
     // Ruoan nimi. Kaksi nimiriviä peräkkäin = otsikko + kuvaus.
     const name = l.replace(/[\s,*"]+$/, '').trim();

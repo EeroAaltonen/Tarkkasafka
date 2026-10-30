@@ -209,6 +209,13 @@ async function main() {
     for (const r of restaurants) r.coordsVerified = await geocode(r);
   }
 
+  // Jos ravintola on kiinni jonain viikonpäivänä, sen päivän listaa ei näytetä
+  // (Kårkaféernan sivu voi näyttää muiden ravintoloiden ruokia suljetulle päivälle).
+  for (const r of restaurants) {
+    if (!r.hours) continue;
+    for (const date of Object.keys(menus[r.id] ?? {})) if (!r.hours[isoWeek(date).day]) delete menus[r.id][date];
+  }
+
   // Aukioloajat päivämäärittäin: rajapinnasta (Unica) tai viikkorytmistä.
   for (const r of restaurants) {
     const byDate = {};
