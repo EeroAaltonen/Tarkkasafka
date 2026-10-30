@@ -217,7 +217,7 @@ export function parseKarkaDayById(html) {
   lines.forEach((l, i) => { const m = l.match(/^@@link:.*[?&]id=(\d+)/); if (m) starts.push([i, m[1]]); });
   const out = {};
   // Sivun alaosa (yhteydenottolomake, osoitteet) ei kuulu viimeiseen ravintolaan.
-  const FOOTER = /^(Astra|Arken|Aurum|Kåren|Catering|Lue lisää|Lähetä)$/i;
+  const FOOTER = /^(Juomat|Astra|Arken|Aurum|Kåren|Catering|Lue lisää|Lähetä|Hyvä ruoka, parempi maailma)$/i;
   starts.forEach(([s, id], k) => {
     let section = lines.slice(s + 1, starts[k + 1]?.[0] ?? lines.length);
     const stop = section.findIndex((l) => FOOTER.test(l));
