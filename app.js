@@ -24,7 +24,18 @@ const state = {
   favs: new Set(store.get('favs', [])),
   metric: store.get('metric', 'protein'),
   rankMode: store.get('rankMode', 'dishes'),
+  cheapOnly: store.get('cheapOnly', false),
 };
+
+// Opiskelijahinta = hintarivin ensimmäinen luku ("3,10 / 7,90 / 9,90").
+// Kilohintaiset ("2,50€/100g") eivät ole kiinteähintaisia annoksia.
+const STUDENT_PRICE = 3.1;
+function studentPrice(price) {
+  if (!price || /\/\s*100\s*g|kg/i.test(price)) return null;
+  const m = price.match(/\d+[.,]\d+/);
+  return m ? parseFloat(m[0].replace(',', '.')) : null;
+}
+const isCheap = (d) => { const p = studentPrice(d.price); return p != null && p <= STUDENT_PRICE + 0.001; };
 
 // ---------- Päivämäärät ----------
 const todayIso = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Helsinki' }).format(new Date());
@@ -124,9 +135,10 @@ function renderList() {
 function renderRank() {
   const m = METRICS[state.metric];
   const rows = [];
-  let missing = 0;
+  let missing = 0, hidden = 0;
   for (const r of state.data.restaurants) {
     for (const d of state.data.menus[r.id]?.[state.date] ?? []) {
+      if (state.cheapOnly && !isCheap(d)) { hidden++; continue; }
       const n = mainNutrition(d);
       const v = n ? m.value(n) : null;
       if (v == null) { missing++; continue; }
@@ -149,8 +161,9 @@ function renderRank() {
       <button data-mode="dishes" class="${state.rankMode === 'dishes' ? 'active' : ''}">Annokset</button>
       <button data-mode="restaurants" class="${state.rankMode === 'restaurants' ? 'active' : ''}">Ravintolat</button>
     </div>
+    <button id="cheap" class="chip" aria-pressed="${state.cheapOnly}">Max 3,10 €</button>
   </div>
-  <p class="note">Arvot ovat annoksen pääkomponentin ravintoarvot 100 grammaa kohden ravintolan omista tiedoista. Lisukkeet ja kastikkeet eivät ole mukana.${state.rankMode === 'restaurants' ? ' Ravintola rankataan sen parhaan annoksen mukaan.' : ''}${missing ? ` <strong>${missing} annosta ilman ravintotietoja</strong> puuttuu listasta.` : ''}</p>`;
+  <p class="note">Arvot ovat annoksen pääkomponentin ravintoarvot 100 grammaa kohden ravintolan omista tiedoista. Lisukkeet ja kastikkeet eivät ole mukana.${state.rankMode === 'restaurants' ? ' Ravintola rankataan sen parhaan annoksen mukaan.' : ''}${missing ? ` <strong>${missing} annosta ilman ravintotietoja</strong> puuttuu listasta.` : ''}${state.cheapOnly ? ` Näytetään vain annokset, joiden opiskelijahinta on enintään 3,10 € (${hidden} piilotettu).` : ''}</p>`;
 
   if (!list.length) return toolbar + '<p class="muted center">Tälle päivälle ei ole ravintotietoja.</p>';
 
@@ -225,6 +238,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.fav != null) return toggleFav(t.dataset.fav);
   if (t.dataset.date) { state.date = t.dataset.date; return render(); }
   if (t.dataset.tab) { state.tab = t.dataset.tab; store.set('tab', state.tab); window.scrollTo(0, 0); return render(); }
+  if (t.id === 'cheap') { state.cheapOnly = !state.cheapOnly; store.set('cheapOnly', state.cheapOnly); return render(); }
   if (t.dataset.mode) { state.rankMode = t.dataset.mode; store.set('rankMode', state.rankMode); return render(); }
 });
 document.addEventListener('change', (e) => {
