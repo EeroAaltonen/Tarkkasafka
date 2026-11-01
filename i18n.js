@@ -34,6 +34,20 @@ const FI = {
   notifyInfo: 'Saat ilmoituksen, kun suosikkiasi on tarjolla tänään. Ilmoitus tulee, kun avaat sovelluksen. Androidilla asennettuna sovellus voi tarkistaa myös taustalla kerran päivässä.',
   notifyTitle: 'Suosikkisi tänään', back: '‹ Takaisin', favAdd: 'Lisää suosikkeihin', favRemove: 'Poista suosikeista',
   weekOf: (n) => `${n}: koko viikko`, sortBy: 'Järjestys', lang: 'EN',
+  tabToday: 'Tänään', todayNoPlan: 'Et ole vielä suunnitellut tämän päivän ruokia.', openPlan: 'Avaa suunnitelma ›',
+  todayNoMenus: 'Tänään ei ole lounasta tarjolla. Tulevien päivien listat löydät Ravintolat-välilehdeltä.',
+  todayLocate: '📍 Näytä lähimmät ravintolat', todayNearest: 'Lähimmät auki olevat', todayBest: 'Auki tänään: eniten proteiinia',
+  todayAllClosed: 'Kaikki ravintolat ovat jo sulkeneet tältä päivältä.', fullList: 'Koko lista ›',
+  goal: '🎯 Proteiinitavoite', goalUnit: 'g / päivä', goalCalcBtn: 'Laske tarve', goalNone: 'Aseta päivän proteiinitavoite, niin suunnitelma näyttää, paljonko siitä täyttyy.',
+  calcWeight: 'Paino (kg)', calcActivity: 'Liikunta',
+  act_low: 'Vähän liikuntaa (0,8 g/kg)', act_mid: 'Liikun säännöllisesti (1,2 g/kg)', act_gym: 'Kuntosali / lihaskasvu (1,6 g/kg)', act_cut: 'Kuntosali ja laihdutus (2,0 g/kg)',
+  calcResult: (g) => `Tarpeesi on noin <strong>${g} g</strong> proteiinia päivässä.`, useThis: 'Käytä tavoitteena',
+  calcNote: 'Laskuri perustuu yleisiin suosituksiin: aikuinen tarvitsee vähintään noin 0,8 g proteiinia painokiloa kohden päivässä (EFSA), ja paljon treenaava tyypillisesti 1,2–2,0 g. Lisätietoa:',
+  goalLeft: (n) => `${n} g puuttuu`, goalReached: 'Tavoite täynnä 💪', ownProtein: 'Proteiini g',
+  shopTitle: '🛒 Kauppalista', shopPlaceholder: 'Lisää tuote, esim. kananmunat', shopEmpty: 'Lista on tyhjä. Lisää tuotteita yllä.',
+  shopHomeMeals: 'Viikon kotiruoat:', shopClearDone: 'Poista ostetut', shopShare: '📋 Jaa lista', shopDel: 'Poista tuote',
+  feedback: '💬 Anna palautetta', feedbackInfo: 'Kerro, mikä toimii ja mikä ei, tai mitä toivoisit lisää. Jokainen viesti luetaan.',
+  privacy: 'Sovellus laskee nimettömästi, montako kertaa sitä avataan. Evästeitä tai henkilötietoja ei tallenneta.',
 };
 
 const EN = {
@@ -69,6 +83,20 @@ const EN = {
   notifyInfo: 'You get a notification when a favourite is on the menu today. It appears when you open the app. On Android, the installed app can also check in the background once a day.',
   notifyTitle: 'Your favourites today', back: '‹ Back', favAdd: 'Add to favourites', favRemove: 'Remove from favourites',
   weekOf: (n) => `${n}: whole week`, sortBy: 'Sort', lang: 'FI',
+  tabToday: 'Today', todayNoPlan: 'You have not planned today’s meals yet.', openPlan: 'Open plan ›',
+  todayNoMenus: 'No lunch is served today. Upcoming menus are on the Restaurants tab.',
+  todayLocate: '📍 Show nearest restaurants', todayNearest: 'Nearest open restaurants', todayBest: 'Open today: most protein',
+  todayAllClosed: 'All restaurants have closed for today.', fullList: 'Full menu ›',
+  goal: '🎯 Protein goal', goalUnit: 'g / day', goalCalcBtn: 'Calculate', goalNone: 'Set a daily protein goal and the plan shows how much of it you reach.',
+  calcWeight: 'Weight (kg)', calcActivity: 'Activity',
+  act_low: 'Little exercise (0.8 g/kg)', act_mid: 'Regular exercise (1.2 g/kg)', act_gym: 'Gym / muscle gain (1.6 g/kg)', act_cut: 'Gym and weight loss (2.0 g/kg)',
+  calcResult: (g) => `You need about <strong>${g} g</strong> of protein a day.`, useThis: 'Use as goal',
+  calcNote: 'Based on general guidance: adults need at least about 0.8 g of protein per kg of body weight a day (EFSA), people who train a lot typically 1.2–2.0 g. More info:',
+  goalLeft: (n) => `${n} g to go`, goalReached: 'Goal reached 💪', ownProtein: 'Protein g',
+  shopTitle: '🛒 Shopping list', shopPlaceholder: 'Add an item, e.g. eggs', shopEmpty: 'The list is empty. Add items above.',
+  shopHomeMeals: 'Home meals this week:', shopClearDone: 'Remove bought', shopShare: '📋 Share list', shopDel: 'Remove item',
+  feedback: '💬 Send feedback', feedbackInfo: 'Tell us what works, what does not, or what you would like to see. Every message is read.',
+  privacy: 'The app anonymously counts how many times it is opened. No cookies or personal data are stored.',
 };
 
 export const DICTS = { fi: FI, en: EN };

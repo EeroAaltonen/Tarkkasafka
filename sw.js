@@ -1,6 +1,6 @@
 // Sovelluksen kuori välimuistiin (toimii myös ilman verkkoa),
 // ruokalistat haetaan aina ensin verkosta.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'i18n.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

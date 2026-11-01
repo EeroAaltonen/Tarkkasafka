@@ -2,12 +2,16 @@
 
 Turun opiskelijaravintoloiden ruokalistat yhdessä paikassa. Asennettava web-sovellus (PWA), joka toimii puhelimessa kuin oma appi.
 
+- **Tänään:** etusivu, jossa päivän suunnitelma, proteiinitavoitteen edistyminen, suosikit ja lähimmät auki olevat ravintolat parhaine annoksineen
 - **Ravintolat:** päivän ruokalistat kaikista ravintoloista, lähin ensin (📍 Lähimmät)
 - **Rankkaus:** annokset tai ravintolat järjestettynä proteiinin, proteiini/energia-suhteen tai kalorien mukaan
 - **Suodattimet:** ruokavalio (liharuoat, kasvis, gluteeniton, laktoositon, maidoton) ja Max 3,10 €
 - **Kartta:** ravintolat kartalla, vihreä = auki ja tarjolla suodatinta vastaavia ruokia
 - **Aukioloajat:** suljetut ravintolat harmaana listan lopussa. Ravintolan voi piilottaa tai pienentää nimeä painamalla.
-- **Suunnitelma:** viikon lounaat ja päivälliset aikatauluun raahaamalla (⠿) tai napilla, omat kotiruoat mukaan, päivän proteiini- ja kalorisumma, jako/kopiointi
+- **Suunnitelma:** viikon lounaat ja päivälliset aikatauluun raahaamalla (⠿) tai napilla, omat kotiruoat mukaan (proteiinimäärä voi lisätä itse), päivän proteiini- ja kalorisumma, jako/kopiointi
+- **Proteiinitavoite ja laskuri:** päivän tavoite (laskuri painon ja liikunnan mukaan), edistyminen näkyy suunnitelmassa ja Tänään-sivulla
+- **Kauppalista:** oma ostoslista suunnitelma-sivulla, viikon kotiruoat muistutuksena
+- **Palaute ja käyttäjälaskuri:** asetetaan app.js:n alussa (FEEDBACK_URL, GOATCOUNTER_CODE); tyhjänä pois päältä
 - **Etsi:** hae ruokaa nimellä kaikista ravintoloista tästä päivästä eteenpäin
 - **Mihin menen nyt?:** lähin auki oleva ravintola, jossa on suodattimiesi mukaista ruokaa
 - **Allergiasuodatin:** kala, äyriäiset, pähkinät, kananmuna, soija, selleri, sinappi, seesami (tunnistetaan ainesosista, ei aina täydellinen)

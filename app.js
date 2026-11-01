@@ -3,6 +3,12 @@
 
 import { DICTS } from './i18n.js';
 
+// ---------- Asetukset ----------
+// Palautelomakkeen osoite (esim. Google Forms). Tyhjä = palautenappi piilossa.
+const FEEDBACK_URL = '';
+// GoatCounter-tilin koodi nimetöntä käyttäjälaskuria varten. Tyhjä = ei laskuria.
+const GOATCOUNTER_CODE = '';
+
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -21,7 +27,8 @@ const normName = (s) => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
 const state = {
   data: null,
   date: null,
-  tab: store.get('tab', 'list'),
+  // Tänään-näkymä avautuu ensimmäisellä kerralla, sen jälkeen viimeksi käytetty välilehti.
+  tab: store.get('seenToday', false) ? store.get('tab', 'today') : 'today',
   pos: null,
   favs: new Set(store.get('favs', [])),
   hidden: new Set(store.get('hidden', [])),
@@ -41,7 +48,13 @@ const state = {
   search: '',
   picker: null, // { key } lisättävä ruoka
   toast: '',
+  goal: store.get('goal', null), // proteiinitavoite g / päivä
+  showCalc: false,
+  calcW: store.get('calcW', ''),
+  calcA: store.get('calcA', 'mid'),
+  shop: store.get('shop', []), // [{ text, done }]
 };
+store.set('seenToday', true);
 const t = (k, ...a) => { const v = DICTS[state.lang][k] ?? DICTS.fi[k] ?? k; return typeof v === 'function' ? v(...a) : v; };
 const CHAINS = { unica: 'Unica', sodexo: 'Sodexo', karka: 'Kårkaféerna', jamix: 'Juvenes' };
 const ALLERGENS = ['kala', 'ayriaiset', 'pahkina', 'kananmuna', 'soija', 'selleri', 'sinappi', 'seesami'];
@@ -215,6 +228,20 @@ function setPlan(date, slot, entry) {
   store.set('plan', state.plan);
 }
 const entryName = (e) => (state.lang === 'en' && e.name_en) || e.name;
+function dayTotals(date) {
+  const es = ['lunch', 'dinner'].map((s) => state.plan[date]?.[s]).filter((e) => e?.n);
+  const kc = es.filter((e) => e.n.kcal != null);
+  return { any: es.length > 0, protein: es.reduce((a, e) => a + (e.n.protein ?? 0), 0), kcal: kc.length ? kc.reduce((a, e) => a + e.n.kcal, 0) : null };
+}
+function goalBar(protein, compact = false) {
+  if (!state.goal) return '';
+  const pct = Math.min(100, Math.round((protein / state.goal) * 100));
+  const met = protein >= state.goal;
+  return `<div class="bar${met ? ' met' : ''}"><span style="width:${pct}%"></span></div>${compact ? '' : `<div class="meta">P ${protein} / ${state.goal} g · ${met ? t('goalReached') : t('goalLeft', state.goal - protein)}</div>`}`;
+}
+const ACTIVITY = { low: 0.8, mid: 1.2, gym: 1.6, cut: 2.0 };
+const calcGrams = () => { const w = Number(String(state.calcW).replace(',', '.')); return w >= 30 && w <= 250 ? Math.round((w * ACTIVITY[state.calcA]) / 5) * 5 : null; };
+const EFSA_URL = 'https://www.efsa.europa.eu/fi/press/news/120209';
 
 function showToast(msg) {
   state.toast = msg;
@@ -323,6 +350,51 @@ function bannersHtml() {
       <div class="pop-actions"><button class="chip" data-showlist="${r.id}">${t('tabList')}</button><a class="chip" href="${mapsUrl(r)}" target="_blank" rel="noopener">${t('route')}</a></div></div>`;
   }
   return html;
+}
+
+// ---------- Tänään ----------
+function renderToday() {
+  const today = todayIso();
+  let html = `<h2 class="view-title">${t('today')} · ${dayLabel(today, true)}</h2>`;
+  // Päivän suunnitelma ja proteiinitavoite
+  const p = state.plan[today];
+  const tot = dayTotals(today);
+  html += `<div class="banner plan"><strong>${t('planToday')}</strong>
+    ${p && (p.lunch || p.dinner)
+      ? ['lunch', 'dinner'].filter((s) => p[s]).map((s) => `<div>${t(s)}: ${esc(entryName(p[s]))}${p[s].rname ? ` – ${esc(p[s].rname)}` : ''}</div>`).join('')
+      : `<div class="meta">${t('todayNoPlan')}</div>`}
+    ${goalBar(tot.protein)}
+    <div class="pop-actions"><button class="chip" data-tab="plan">${t('openPlan')}</button></div></div>`;
+  const fav = favouritesToday();
+  if (fav.length) html += `<div class="banner fav"><strong>${t('favToday')}</strong>${fav.map((h) => `<div>${esc(itemName(h.it))} – ${esc(h.r.name)}${distOf(h.r) != null ? ` · ${fmtDist(distOf(h.r))}` : ''}</div>`).join('')}</div>`;
+
+  const serving = visibleRestaurants().filter((r) => dishesOf(r, today).length);
+  if (!serving.length) return html + `<div class="banner">${t('todayNoMenus')}</div>` + feedbackHtml();
+  const best = (r) => Math.max(-1, ...dishesOf(r, today).filter(passes).map((d) => mainNutrition(d)?.protein ?? -1));
+  const open = serving
+    .map((r) => ({ r, st: openStatus(r, today, true), dishes: dishesOf(r, today).map((d, i) => [d, i]).filter(([d]) => passes(d)) }))
+    .filter((x) => !x.st.closed && x.dishes.length);
+  if (state.pos) open.sort((a, b) => distOf(a.r) - distOf(b.r));
+  else open.sort((a, b) => best(b.r) - best(a.r));
+  if (!state.pos) html += `<button class="gonow" data-locatebtn>${t('todayLocate')}</button>`;
+  html += `<h3 class="sub">${state.pos ? t('todayNearest') : t('todayBest')}</h3>`;
+  if (!open.length) html += `<div class="banner">${t('todayAllClosed')}</div>`;
+  for (const { r, st, dishes } of open.slice(0, 3)) {
+    const top = [...dishes].sort(([a], [b]) => (mainNutrition(b)?.protein ?? -1) - (mainNutrition(a)?.protein ?? -1)).slice(0, 2);
+    html += `<section class="card">
+      <div class="card-head"><h2>${esc(r.name)}</h2>${distOf(r) != null ? `<span class="dist">${fmtDist(distOf(r))}</span>` : ''}</div>
+      <div class="meta">${esc(r.campus)}${st.text ? ` · <span class="${st.open ? 'open' : ''}">${esc(st.text)}</span>` : ''}</div>
+      ${top.map(([d, i]) => dishHtml(r, d, today, i)).join('')}
+      <div class="card-actions"><button data-showlist="${r.id}">${t('fullList')}</button><a href="${mapsUrl(r)}" target="_blank" rel="noopener">${t('route')}</a></div>
+    </section>`;
+  }
+  return html + feedbackHtml();
+}
+
+function feedbackHtml() {
+  return `${FEEDBACK_URL ? `<div class="banner feedback"><strong>${t('feedback')}</strong><div class="meta">${t('feedbackInfo')}</div>
+      <div class="pop-actions"><a class="chip active" href="${esc(FEEDBACK_URL)}" target="_blank" rel="noopener">${t('feedback')}</a></div></div>` : ''}
+    ${GOATCOUNTER_CODE ? `<p class="meta privacy">${t('privacy')}</p>` : ''}`;
 }
 
 function computeGoNow() {
@@ -566,9 +638,10 @@ function renderPlan() {
     </div>`;
   };
   const total = (date) => {
-    const es = ['lunch', 'dinner'].map((s) => state.plan[date]?.[s]).filter((e) => e?.n);
-    if (!es.length) return '<div class="tt-total"></div>';
-    return `<div class="tt-total">P ≈${es.reduce((a, e) => a + e.n.protein, 0)} g<br>${es.reduce((a, e) => a + e.n.kcal, 0)} kcal</div>`;
+    const tot = dayTotals(date);
+    if (!tot.any && !state.goal) return '<div class="tt-total"></div>';
+    const met = state.goal && tot.protein >= state.goal;
+    return `<div class="tt-total${met ? ' met' : ''}">${goalBar(tot.protein, true)}P ${tot.any ? '≈' : ''}${tot.protein}${state.goal ? `/${state.goal}` : ''} g${tot.kcal != null ? `<br>${tot.kcal} kcal` : ''}</div>`;
   };
   const grid = `<div class="tt">
       ${days.map((d) => `<div class="tt-day${d === todayIso() ? ' today' : ''}">${shortDay(d)}</div>`).join('')}
@@ -590,7 +663,7 @@ function renderPlan() {
         <div class="meta">${dayLabel(dd, true)} · ${t(ds)}</div>
         <strong>${esc(entryName(e))}</strong>
         ${e.rname ? `<div class="meta">${esc(e.rname)}${e.price ? ` · ${esc(e.price)}` : ''}</div>` : ''}
-        ${e.n ? `<div class="plate">${t('plate')} (${t('estimate')}): <strong>P ≈${e.n.protein} g</strong> · ${e.n.kcal} kcal</div>` : ''}
+        ${e.n ? `<div class="plate">${e.own ? '' : `${t('plate')} (${t('estimate')}): `}<strong>P ${e.own ? '' : '≈'}${e.n.protein} g</strong>${e.n.kcal != null ? ` · ${e.n.kcal} kcal` : ''}</div>` : ''}
         <div class="dish-actions"><button class="chip" data-unplan="${state.planDetail}">✕ ${t('remove')}</button><button class="linklike" data-detail="">${t('close')}</button></div>
       </section>`;
     } else state.planDetail = null;
@@ -620,13 +693,50 @@ function renderPlan() {
       <button class="chip" data-planweek="7">${t('nextWeek')}</button>
     </div>
     <p class="note">${t('planHint')}</p>
+    ${goalHtml()}
     ${grid}
     ${detail}
     ${pickSlot ? ownMealHtml(pickSlot) : ''}
     <div class="toolbar"><button class="chip" data-planshare>${t('planShare')}</button><button class="chip" data-planclear>${t('planClear')}</button></div>
+    ${shopHtml(days)}
     <h2 class="view-title">${t('planSource', dayLabel(state.date, true))}</h2>
     <div class="sources">${source}</div>`;
 }
+
+// Proteiinitavoite ja laskuri
+function goalHtml() {
+  const g = calcGrams();
+  const calc = state.showCalc ? `<div class="calc">
+      <label>${t('calcWeight')}<input id="calc-w" type="number" inputmode="decimal" min="30" max="250" value="${esc(state.calcW)}" placeholder="70"></label>
+      <label>${t('calcActivity')}<select id="calc-a">${Object.keys(ACTIVITY).map((k) => `<option value="${k}" ${k === state.calcA ? 'selected' : ''}>${t('act_' + k)}</option>`).join('')}</select></label>
+      ${g ? `<p class="calc-res"><span>${t('calcResult', g)}</span> <button class="chip active" data-usegoal="${g}">${t('useThis')}</button></p>` : ''}
+      <p class="meta">${t('calcNote')} <a href="${EFSA_URL}" target="_blank" rel="noopener">EFSA</a></p>
+    </div>` : '';
+  return `<section class="card goal">
+    <div class="goal-row"><strong>${t('goal')}</strong>
+      <span class="goal-input"><input id="goal" type="number" inputmode="numeric" min="0" max="400" value="${state.goal ?? ''}" placeholder="–" aria-label="${esc(t('goal'))}"> ${t('goalUnit')}</span>
+      <button class="linklike" data-calc>${t('goalCalcBtn')} ${state.showCalc ? '▴' : '▾'}</button></div>
+    ${!state.goal && !state.showCalc ? `<p class="meta">${t('goalNone')}</p>` : ''}
+    ${calc}
+  </section>`;
+}
+
+// Kauppalista (yksi lista, tallessa tässä laitteessa)
+function shopHtml(days) {
+  const home = [];
+  for (const d of days) for (const s of ['lunch', 'dinner']) { const e = state.plan[d]?.[s]; if (e?.own) home.push(`${WD[state.lang][new Date(d + 'T12:00:00').getDay()]}: ${esc(e.name)}`); }
+  const items = state.shop.map((it, i) => `<div class="shop-item${it.done ? ' done' : ''}">
+      <label><input type="checkbox" data-shoptoggle="${i}" ${it.done ? 'checked' : ''}><span>${esc(it.text)}</span></label>
+      <button class="linklike" data-shopdel="${i}" aria-label="${esc(t('shopDel'))}">✕</button></div>`).join('');
+  return `<section class="card shop">
+    <div class="card-head"><h2>${t('shopTitle')}</h2>${state.shop.length ? `<span class="meta">${state.shop.filter((x) => !x.done).length}/${state.shop.length}</span>` : ''}</div>
+    ${home.length ? `<p class="meta">${t('shopHomeMeals')} ${home.join(' · ')}</p>` : ''}
+    <div class="own"><input id="shop-input" type="text" placeholder="${esc(t('shopPlaceholder'))}" aria-label="${esc(t('shopTitle'))}"><button class="chip active" data-shopadd>${t('add')}</button></div>
+    ${items || `<p class="empty">${t('shopEmpty')}</p>`}
+    ${state.shop.length ? `<div class="dish-actions">${state.shop.some((x) => x.done) ? `<button class="chip" data-shopclear>${t('shopClearDone')}</button>` : ''}<button class="chip" data-shopshare>${t('shopShare')}</button></div>` : ''}
+  </section>`;
+}
+const saveShop = () => store.set('shop', state.shop);
 
 // Tyhjää paikkaa painettaessa: oma ruoka tai valinta päivän listalta
 function ownMealHtml(slotKey) {
@@ -635,7 +745,7 @@ function ownMealHtml(slotKey) {
   for (const r of visibleRestaurants()) dishesOf(r, date).forEach((d, i) => { if (passes(d)) opts.push({ r, d, i }); });
   return `<section class="card picker">
     <div class="card-head"><h2>${dayLabel(date, true)} · ${t(slot)}</h2><button class="linklike" data-slotpick="">${t('cancel')}</button></div>
-    <div class="own"><input id="own-meal" type="text" placeholder="${esc(t('planOwnPlaceholder'))}" aria-label="${esc(t('planOwn'))}"><button class="chip active" data-ownadd="${slotKey}">${t('add')}</button></div>
+    <div class="own"><input id="own-meal" type="text" placeholder="${esc(t('planOwnPlaceholder'))}" aria-label="${esc(t('planOwn'))}"><input id="own-protein" class="num" type="number" inputmode="numeric" min="0" max="300" placeholder="${esc(t('ownProtein'))}" aria-label="${esc(t('ownProtein'))}"><button class="chip active" data-ownadd="${slotKey}">${t('add')}</button></div>
     ${opts.slice(0, 60).map(({ r, d, i }) => {
       const main = d.items.find((it) => it.nutrition) ?? d.items[0];
       return `<button class="pick-row" data-place="${dishKey(r.id, date, i)}" data-slot="${slot}"><span>${esc(itemName(main))}</span><span class="meta">${esc(r.name)}</span></button>`;
@@ -829,12 +939,12 @@ function renderTop() {
   $('#allergy-row').innerHTML = state.showAllergies
     ? `<span class="meta">${t('allergiesHint')}</span>${ALLERGENS.map((a) => `<button class="chip ${state.allergies.has(a) ? 'active' : ''}" data-alg="${a}">${t('alg_' + a)}</button>`).join('')}<p class="meta">${t('allergyNote')}</p>`
     : '';
-  const hideDays = state.tab === 'search';
+  const hideDays = state.tab === 'search' || state.tab === 'today';
   $('#days').style.display = hideDays ? 'none' : '';
   $('#locate').textContent = state.pos ? t('locate') : t('locate');
   $('#lang').textContent = t('lang');
   document.documentElement.lang = state.lang;
-  document.querySelectorAll('.tabs button').forEach((b) => { b.querySelector('.lbl').textContent = t({ list: 'tabList', rank: 'tabRank', map: 'tabMap', plan: 'tabPlan', search: 'tabSearch' }[b.dataset.tab]); });
+  document.querySelectorAll('.tabs button').forEach((b) => { b.querySelector('.lbl').textContent = t({ today: 'tabToday', list: 'tabList', rank: 'tabRank', map: 'tabMap', plan: 'tabPlan', search: 'tabSearch' }[b.dataset.tab]); });
 }
 
 function render() {
@@ -843,14 +953,18 @@ function render() {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
   if (state.tab === 'map') return renderMap();
   if (map) { map.remove(); map = null; markerLayer = null; }
-  const active = document.activeElement?.id;
-  const caret = active === 'search' ? document.activeElement.selectionStart : null;
+  const activeEl = document.activeElement;
+  const active = activeEl && $('#view').contains(activeEl) ? activeEl.id : null;
+  let caret = null;
+  try { caret = activeEl.selectionStart; } catch { /* numerokenttä */ }
   $('#view').innerHTML =
-    state.tab === 'rank' ? renderRank()
+    state.tab === 'today' ? renderToday()
+    : state.tab === 'rank' ? renderRank()
     : state.tab === 'search' ? renderSearch()
     : state.tab === 'plan' ? renderPlan()
     : renderList();
-  if (active === 'search') { const s = $('#search'); s.focus(); s.setSelectionRange(caret, caret); }
+  // Kirjoittaminen jatkuu samassa kentässä uudelleenpiirron jälkeen
+  if (active) { const el = document.getElementById(active); if (el) { el.focus(); try { if (caret != null) el.setSelectionRange(caret, caret); } catch { /* ei tekstikenttä */ } } }
   renderStatus();
 }
 
@@ -888,7 +1002,8 @@ document.addEventListener('click', async (e) => {
   if (ds.slotpick != null) { state.slotPick = ds.slotpick || null; state.planDetail = null; render(); if (state.slotPick) $('#own-meal')?.focus(); return; }
   if (ds.ownadd) {
     const v = $('#own-meal')?.value.trim();
-    if (v) { const [date, slot] = ds.ownadd.split('|'); setPlan(date, slot, { name: v, own: true }); }
+    const pr = Math.round(Number($('#own-protein')?.value));
+    if (v) { const [date, slot] = ds.ownadd.split('|'); setPlan(date, slot, { name: v, own: true, ...(pr > 0 ? { n: { protein: pr, kcal: null } } : {}) }); }
     state.slotPick = null;
     return render();
   }
@@ -910,6 +1025,25 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (ds.notify != null) return enableNotifications();
+  if (ds.locatebtn != null) return locate();
+  if (ds.calc != null) { state.showCalc = !state.showCalc; return render(); }
+  if (ds.usegoal) { state.goal = Number(ds.usegoal); store.set('goal', state.goal); state.showCalc = false; return render(); }
+  if (ds.shopadd != null) {
+    const inp = $('#shop-input');
+    const v = inp?.value.trim();
+    if (v) { state.shop.push({ text: v, done: false }); saveShop(); render(); $('#shop-input')?.focus(); }
+    return;
+  }
+  if (ds.shopdel != null) { state.shop.splice(Number(ds.shopdel), 1); saveShop(); return render(); }
+  if (ds.shopclear != null) { state.shop = state.shop.filter((x) => !x.done); saveShop(); return render(); }
+  if (ds.shopshare != null) {
+    const text = [t('shopTitle'), ...state.shop.filter((x) => !x.done).map((x) => `- ${x.text}`)].join('\n');
+    try {
+      if (navigator.share) await navigator.share({ title: 'Safkatrack', text });
+      else { await navigator.clipboard.writeText(text); showToast(t('copied')); }
+    } catch { /* peruttu */ }
+    return;
+  }
   if (ds.gonow != null) {
     if (!state.pos) { state.goNow = 'needloc'; render(); locate(() => { state.goNow = computeGoNow(); render(); }); return; }
     state.goNow = computeGoNow();
@@ -918,6 +1052,7 @@ document.addEventListener('click', async (e) => {
   if (ds.showlist) {
     const id = ds.showlist;
     state.collapsed.delete(id); store.set('collapsed', [...state.collapsed]);
+    if (state.tab === 'today') state.date = todayIso();
     state.tab = 'list'; store.set('tab', 'list'); state.weekOf = null;
     render();
     document.getElementById('r-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -930,12 +1065,18 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.id === 'metric') { state.metric = e.target.value; store.set('metric', state.metric); render(); }
   if (e.target.id === 'diet') { state.diet = e.target.value; store.set('diet', state.diet); render(); }
+  if (e.target.id === 'goal') { const g = Math.round(Number(e.target.value)); state.goal = g > 0 ? g : null; store.set('goal', state.goal); render(); }
+  if (e.target.id === 'calc-a') { state.calcA = e.target.value; store.set('calcA', state.calcA); render(); }
+  if (e.target.dataset.shoptoggle != null) { const it = state.shop[Number(e.target.dataset.shoptoggle)]; if (it) { it.done = e.target.checked; saveShop(); render(); } }
 });
 document.addEventListener('input', (e) => {
   if (e.target.id === 'search') { state.search = e.target.value; render(); }
+  if (e.target.id === 'calc-w') { state.calcW = e.target.value; store.set('calcW', state.calcW); render(); }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.id === 'own-meal') $('[data-ownadd]')?.click();
+  if (e.key === 'Enter' && (e.target.id === 'own-meal' || e.target.id === 'own-protein')) $('[data-ownadd]')?.click();
+  if (e.key === 'Enter' && e.target.id === 'shop-input') $('[data-shopadd]')?.click();
+  if (e.key === 'Enter' && e.target.id === 'goal') e.target.blur();
 });
 
 function locate(after) {
@@ -980,8 +1121,16 @@ async function load() {
 
 if (store.get('useLocation', false)) locate();
 load();
+// Nimetön käyttäjälaskuri: ei evästeitä eikä henkilötietoja.
+if (GOATCOUNTER_CODE) {
+  const sc = document.createElement('script');
+  sc.async = true;
+  sc.src = 'https://gc.zgo.at/count.js';
+  sc.dataset.goatcounter = `https://${GOATCOUNTER_CODE}.goatcounter.com/count`;
+  document.head.appendChild(sc);
+}
 // Aukiolotila päivittyy, vaikka sovellus olisi auki pitkään.
-setInterval(() => { if (state.tab === 'list' && !drag) render(); }, 5 * 60 * 1000);
+setInterval(() => { if ((state.tab === 'list' || state.tab === 'today') && !drag) render(); }, 5 * 60 * 1000);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
